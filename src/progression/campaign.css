@@ -1,0 +1,174 @@
+/* Журнал кампании, улучшения и перенос сохранений. Сцена остаётся от края до края. */
+.journal {
+  position: absolute; z-index: 2;
+  top: clamp(20px, 4vh, 44px); right: clamp(20px, 3.4vw, 56px); bottom: clamp(20px, 4vh, 44px);
+  width: min(400px, 34vw);
+  display: flex; flex-direction: column;
+  overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent;
+  padding: 26px 24px 22px; border-radius: 26px;
+  background: var(--glass); border: 1px solid var(--line);
+  backdrop-filter: blur(20px) saturate(1.2); -webkit-backdrop-filter: blur(20px) saturate(1.2);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.35);
+  animation: rise 650ms 80ms cubic-bezier(.2, .7, .2, 1) both;
+}
+.journal-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.journal-heading > span {
+  padding: 4px 11px; border-radius: 999px; border: 1px solid var(--line-strong);
+  font: 600 13px var(--sans); font-variant-numeric: tabular-nums; color: var(--amber-hi); white-space: nowrap;
+}
+.journal h2 { margin: 14px 0 20px; font: 400 clamp(26px, 2.3vw, 34px)/1.1 var(--serif); letter-spacing: -0.03em; }
+
+/* Список ночей — вертикальная «лестница» к рассвету */
+.night-list { display: grid; gap: 4px; position: relative; }
+.night-choice {
+  display: grid; grid-template-columns: 34px 1fr auto; gap: 12px; align-items: center;
+  width: 100%; padding: 11px 12px; text-align: left;
+  border: 1px solid transparent; border-radius: 12px; background: transparent;
+  font-size: 14px; color: var(--text); cursor: pointer;
+  transition: background 150ms, border-color 150ms;
+}
+.night-number {
+  display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%;
+  border: 1px solid var(--line-strong); font: 500 14px var(--serif); color: var(--amber);
+}
+.night-choice small { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; color: var(--dim); white-space: nowrap; }
+.night-choice:hover:not(:disabled) { background: rgba(246, 234, 215, 0.06); }
+.night-choice[aria-pressed="true"] { background: rgba(242, 193, 120, 0.12); border-color: rgba(242, 193, 120, 0.45); }
+.night-choice[aria-pressed="true"] .night-number { background: var(--amber); border-color: var(--amber); color: #2a1d12; }
+.night-choice:disabled { opacity: 0.35; cursor: not-allowed; }
+.endless-choice {
+  display: flex; justify-content: space-between; align-items: center; width: 100%;
+  margin-top: 8px; padding: 13px 14px; border-radius: 12px;
+  border: 1px solid rgba(185, 199, 154, 0.35); background: rgba(185, 199, 154, 0.08);
+  font-size: 14px; color: var(--text); cursor: pointer;
+}
+.endless-choice span { color: var(--sage); font-variant-numeric: tabular-nums; }
+.endless-choice:hover, .endless-choice[aria-pressed="true"] { background: rgba(185, 199, 154, 0.18); border-color: var(--sage); }
+
+.night-brief { margin-top: 18px; padding: 18px; border-radius: 16px; background: rgba(20, 15, 13, 0.45); border: 1px solid var(--line); }
+.night-brief .eyebrow { font-size: 11px; }
+.night-brief h3 { margin: 8px 0 8px; font: 400 25px/1.1 var(--serif); letter-spacing: -0.02em; }
+.night-brief > p:not(.eyebrow) { margin: 0 0 8px; font-size: 13px; line-height: 1.6; color: var(--muted); }
+.night-brief p.night-condition { margin: 10px 0 0; padding-left: 10px; border-left: 2px solid var(--amber); font-size: 12px; color: var(--amber-hi); }
+.build-summary { margin-top: 14px; font-size: 12px; line-height: 1.6; color: var(--sage); }
+.save-note { margin: 12px 0 0; font-size: 12px; line-height: 1.55; color: var(--dim); }
+
+.save-transfer { margin-top: auto; padding-top: 16px; font-size: 13px; }
+.save-transfer summary { padding: 12px 0 4px; border-top: 1px solid var(--line); color: var(--muted); }
+.save-transfer p { margin: 8px 0; font-size: 12px; line-height: 1.55; color: var(--dim); }
+.save-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.save-transfer button, .import-label {
+  position: relative; display: inline-block; padding: 8px 14px; border-radius: 999px;
+  border: 1px solid var(--line-strong); background: rgba(246, 234, 215, 0.05);
+  font-size: 12px; color: var(--text); cursor: pointer;
+}
+.import-label input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.import-label:focus-within { outline: 2px solid var(--amber-hi); outline-offset: 3px; }
+.save-transfer button:hover, .import-label:hover { border-color: var(--amber); background: rgba(246, 234, 215, 0.1); }
+
+/* Итог ночи: прогноз и выбор улучшения */
+.night-outlook {
+  white-space: pre-line; margin: 22px 0 0; padding: 14px 16px; border-radius: 14px;
+  background: rgba(242, 193, 120, 0.07); border: 1px solid rgba(242, 193, 120, 0.25);
+  font-size: 13px; line-height: 1.7; color: var(--muted);
+}
+.night-outlook::first-line { color: var(--amber-hi); font-weight: 600; letter-spacing: 0.06em; }
+.upgrade-panel { margin-top: 26px; }
+.upgrade-panel > .eyebrow { margin-bottom: 14px; }
+.upgrade-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.upgrade-choice {
+  display: flex; flex-direction: column; gap: 10px; padding: 20px 16px; text-align: left;
+  border-radius: 18px; border: 1px solid var(--line-strong); background: rgba(246, 234, 215, 0.04);
+  color: var(--text); cursor: pointer;
+  transition: transform 160ms ease, border-color 160ms, background 160ms;
+}
+.upgrade-choice:hover { transform: translateY(-4px); border-color: var(--amber); background: rgba(242, 193, 120, 0.1); }
+.upgrade-icon {
+  display: grid; place-items: center; width: 46px; height: 46px; border-radius: 14px;
+  background: rgba(242, 193, 120, 0.14); font: 24px var(--serif); color: var(--amber-hi);
+}
+.upgrade-choice strong { font-size: 15px; font-weight: 650; }
+.upgrade-choice small { font-size: 13px; line-height: 1.55; color: var(--muted); }
+
+/* Ник и зал славы */
+.nick-form { margin: 0 0 22px; }
+.nick-form label { display: block; margin-bottom: 8px; font-size: 11px; font-weight: 650; letter-spacing: 0.16em; color: var(--muted); text-transform: uppercase; }
+.nick-row { display: flex; gap: 8px; }
+.nick-row input {
+  flex: 1; min-width: 0; padding: 10px 14px; border-radius: 999px;
+  border: 1px solid var(--line-strong); background: rgba(20, 15, 13, 0.55); font-size: 14px;
+}
+.nick-row input:focus-visible { outline: 2px solid var(--amber-hi); outline-offset: 2px; }
+.nick-status { margin: 8px 0 0; min-height: 1.4em; font-size: 12px; color: var(--dim); }
+body.is-x3 .nick-status { color: var(--rose); font-weight: 600; }
+body.is-x3 .nick-row input { border-color: var(--rose); box-shadow: 0 0 18px rgba(239, 143, 118, 0.3); }
+.x3 { margin-left: 6px; padding: 1px 6px; border-radius: 6px; background: var(--rose); color: #2a1d12; font-size: 10px; letter-spacing: 0.04em; }
+.legends { margin-top: 16px; }
+.legends ol { margin: 10px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; counter-reset: rank; }
+.legends li { display: flex; justify-content: space-between; gap: 10px; padding: 7px 10px; border-radius: 10px; background: rgba(246, 234, 215, 0.04); font-size: 13px; counter-increment: rank; }
+.legends li::before { content: counter(rank); width: 18px; color: var(--amber); font-family: var(--serif); }
+.legends li span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.legends li b { color: var(--rose); font-size: 11px; }
+.legends li small { color: var(--dim); font-size: 11px; white-space: nowrap; }
+.legends li.empty { color: var(--dim); }
+.legends li.empty::before { content: none; }
+
+/* Мини-игра между ночами */
+.bonus-summary {
+  white-space: pre-line; margin: 22px 0 0; padding: 14px 16px; border-radius: 14px;
+  background: rgba(185, 199, 154, 0.09); border: 1px solid rgba(185, 199, 154, 0.35);
+  font-size: 13px; line-height: 1.7; color: var(--muted);
+}
+.bonus-summary::first-line { color: var(--sage); font-weight: 600; letter-spacing: 0.06em; }
+.minigame {
+  position: absolute; z-index: 5; inset: 0; display: grid; place-items: center; padding: 16px;
+  background: radial-gradient(80% 80% at 50% 50%, rgba(14, 10, 9, 0.4), rgba(14, 10, 9, 0.8));
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  animation: fade 260ms ease both;
+}
+.minigame-card {
+  width: min(900px, 100%); padding: clamp(18px, 3vw, 30px); border-radius: 26px;
+  background: var(--glass-strong); border: 1px solid var(--line); box-shadow: 0 40px 120px rgba(0, 0, 0, 0.5);
+  animation: rise 380ms cubic-bezier(.2, .7, .2, 1) both;
+}
+.minigame-head { display: flex; justify-content: space-between; align-items: end; gap: 16px; margin-bottom: 14px; }
+.minigame-head h2 { margin: 6px 0 0; font: 400 clamp(28px, 3.4vw, 42px)/1 var(--serif); letter-spacing: -0.03em; }
+.minigame-score { display: grid; justify-items: end; }
+.minigame-score span { font-size: 11px; font-weight: 650; letter-spacing: 0.16em; color: var(--muted); }
+.minigame-score output { font: 500 38px/1 var(--serif); color: var(--amber-hi); font-variant-numeric: tabular-nums; }
+.minigame-score small { min-height: 1.3em; font-size: 12px; color: var(--sage); }
+#minigame-canvas { display: block; width: 100%; aspect-ratio: 16 / 9; border-radius: 16px; background: #5d5476; touch-action: none; cursor: crosshair; outline: none; }
+#minigame-canvas:focus-visible { outline: 2px solid var(--amber-hi); outline-offset: 3px; }
+.minigame-help { margin: 12px 0 0; font-size: 13px; line-height: 1.6; color: var(--muted); }
+.minigame-help kbd { margin-right: 4px; }
+
+/* Узкие экраны: меню становится прокручиваемой колонкой поверх сцены */
+@media (max-width: 900px) {
+  body[data-state="menu"] .game-shell {
+    overflow-y: auto; display: grid; grid-template-columns: 1fr 1fr; align-content: start;
+    gap: 22px; padding: 28px 22px 26px;
+  }
+  body[data-state="menu"] .vignette { background: rgba(12, 9, 8, 0.6); }
+  body[data-state="menu"] .intro,
+  body[data-state="menu"] .journal,
+  body[data-state="menu"] .controls { position: relative; inset: auto; width: auto; max-height: none; overflow: visible; }
+  body[data-state="menu"] .intro { padding: 0; }
+  body[data-state="menu"] .controls { grid-column: 1 / -1; flex-wrap: wrap; justify-content: space-between; }
+  .intro h1 { font-size: clamp(52px, 9vw, 80px); }
+}
+@media (max-width: 600px) {
+  body[data-state="menu"] .game-shell { grid-template-columns: 1fr; padding: 24px 18px; }
+  body[data-state="menu"] .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .action { width: 100%; min-width: 0; }
+  .result-card { padding: 26px 20px; border-radius: 22px; }
+  .upgrade-options { grid-template-columns: 1fr; gap: 8px; }
+  .upgrade-choice { display: grid; grid-template-columns: 46px 1fr; gap: 4px 12px; padding: 14px; }
+  .upgrade-icon { grid-row: 1 / 3; }
+  .upgrade-choice strong { align-self: end; }
+}
+@media (max-height: 640px) and (min-width: 901px) {
+  .journal { padding: 18px; }
+  .journal h2 { margin: 8px 0 12px; }
+  .night-choice { padding: 6px 10px; }
+  .night-brief { margin-top: 12px; padding: 12px; }
+}

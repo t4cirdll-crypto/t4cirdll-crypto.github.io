@@ -1,0 +1,2 @@
+# cmd.exe needs Windows line endings even when edited on another platform.
+serve.bat text eol=crlf

@@ -1,0 +1,120 @@
+import { chromium } from '@playwright/test';
+import assert from 'node:assert/strict';
+import { mkdir } from 'node:fs/promises';
+
+const url = process.argv[2];
+if (!url || !/^http:\/\/(127\.0\.0\.1|localhost):\d+\/?$/.test(url)) throw Error('Pass actual local project URL');
+await mkdir('.sharrowkin/screenshots', { recursive: true });
+const browser = await chromium.launch({ channel: 'msedge', headless: true });
+const page = await browser.newPage({ viewport: { width: 1366, height: 900 } });
+const errors = [];
+page.on('pageerror', e => errors.push(e.message));
+page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+page.on('requestfailed', r => errors.push(`${r.url()}: ${r.failure()?.errorText}`));
+const model = fn => page.evaluate(fn);
+const state = s => page.waitForFunction(s => __game.state === s, s);
+const dialog = page.getByRole('dialog', { name: 'Админ-меню', exact: true });
+const nick = page.getByRole('textbox', { name: 'Твой ник', exact: true });
+const save = async value => { await nick.fill(value); await nick.press('Enter'); };
+const openButton = () => page.getByRole('button', { name: 'Админ-меню F2', exact: true });
+try {
+  await page.goto(url, { waitUntil: 'networkidle' });
+  await save('Sharrowkin');
+  assert.equal(await model(() => __game.difficulty), 3);
+  assert.equal(await openButton().count(), 0);
+  await page.locator('#game').focus(); await page.keyboard.press('F2');
+  assert.equal(await dialog.isVisible(), false);
+  // Create a real ordinary checkpoint before entering the sandbox.
+  await page.locator('#start-game').click(); await state('play');
+  await page.keyboard.press('KeyP'); await state('pause');
+  await page.getByRole('button', { name: 'В журнал ночей', exact: true }).click();
+  const original = await model(() => localStorage.getItem('nightwatch.campaign.v1'));
+  const legends = await model(() => localStorage.getItem('nightwatch.legends.v1'));
+  await save('killdev');
+  assert.equal(await model(() => __game.state), 'menu', 'nickname Enter must not start the night');
+  assert.equal(await openButton().count(), 1);
+  await openButton().click(); await dialog.waitFor();
+  assert.equal(await dialog.getByRole('button', { name: 'Восстановить сон и шёлк', exact: true }).isEnabled(), false);
+  await dialog.getByRole('checkbox', { name: 'Бессмертие', exact: true }).check();
+  await dialog.getByRole('checkbox', { name: 'Бесконечный шёлк', exact: true }).check();
+  await dialog.getByRole('checkbox', { name: 'Заморозить угрозы', exact: true }).check();
+  await page.screenshot({ path: '.sharrowkin/screenshots/admin-menu.png' });
+  await page.keyboard.press('Escape'); await dialog.waitFor({ state: 'hidden' });
+  assert.equal(await model(() => __game.state), 'menu');
+  await page.locator('#start-game').click(); await state('play');
+  assert.equal(await page.getByRole('progressbar').count(), 4);
+  assert.equal(await openButton().count(), 0, 'no admin launcher in gameplay HUD');
+  const x = await model(() => __game.spider.x);
+  await page.keyboard.down('KeyD'); await page.keyboard.down('Space');
+  await page.waitForTimeout(500);
+  // Open while movement keys are held: no drift, leftover silk or Enter behind modal.
+  await page.keyboard.press('F2'); await dialog.waitFor();
+  await page.keyboard.up('KeyD'); await page.keyboard.up('Space');
+  const snapshot = await model(() => [__game.time, __game.spider.x, __game.spider.silk, __game.web.strands.length]);
+  assert.ok(snapshot[1] > x + 20); assert.ok(snapshot[3] > 0);
+  assert.equal(snapshot[2], await model(() => __game.rules.spider.silkMax));
+  await page.waitForTimeout(200);
+  assert.deepEqual(await model(() => [__game.time, __game.spider.x, __game.spider.silk, __game.web.strands.length]), snapshot);
+  for (const wave of [1, 2, 3, 4]) {
+    await dialog.getByRole('button', { name: `Волна ${wave}`, exact: true }).click();
+    assert.equal(await model(() => __game.wave), wave);
+  }
+  await page.keyboard.press('F2'); await dialog.waitFor({ state: 'hidden' });
+  assert.equal(await model(() => __game.state), 'pause');
+  assert.equal(await page.locator('#game').evaluate(el => el === document.activeElement), true);
+  await page.keyboard.press('KeyP'); await state('play');
+  console.log('ok: killdev unlocks real modal; F2/Esc pause and restore keyboard; ordinary HUD stays four meters');
+
+  // Real danger states, not a mocked defeat path. God mode must survive all three.
+  await model(() => {
+    __game.admin.freezeThreats = false;
+    __game.human.sleep = 0; __game.human.state = 'swat';
+    __game.hunter.summon(__game.spider); __game.hunter.state = 'chase';
+    __game.hunter.x = __game.spider.x; __game.hunter.y = __game.spider.y;
+  });
+  await page.waitForTimeout(200);
+  assert.equal(await model(() => __game.state), 'play');
+  assert.equal(await model(() => __game.human.sleep), 100);
+  await page.keyboard.press('F2'); await dialog.waitFor();
+  await dialog.getByRole('button', { name: 'Убрать врагов', exact: true }).click();
+  assert.equal(await model(() => __game.mosquitoes.length), 0);
+  assert.equal(await model(() => __game.hunter.state), 'hidden');
+  await model(() => { __game.human.sleep = 10; __game.spider.silk = 5; __game.human.suspicion = 80; });
+  await dialog.getByRole('button', { name: 'Восстановить сон и шёлк', exact: true }).click();
+  assert.equal(await model(() => __game.human.sleep), 100);
+  assert.equal(await model(() => __game.human.suspicion), 0);
+  await dialog.getByRole('button', { name: 'Начать ночь заново', exact: true }).click();
+  assert.equal(await model(() => __game.time), 0);
+  assert.equal(await model(() => __game.web.strands.length), 0);
+  await dialog.getByRole('button', { name: 'Завершить ночь: рассвет', exact: true }).click();
+  assert.equal(await model(() => __game.state), 'win');
+  await dialog.getByRole('button', { name: 'Закрыть · F2 / Esc', exact: true }).click();
+  await page.locator('.upgrade-choice').first().click();
+  await page.locator('#result-action').click(); await state('bonus');
+  await page.keyboard.press('F2'); assert.equal(await dialog.isVisible(), false);
+  assert.equal(await model(() => __game.state), 'bonus');
+  assert.equal(await model(() => localStorage.getItem('nightwatch.campaign.v1')), original);
+  assert.equal(await model(() => localStorage.getItem('nightwatch.legends.v1')), legends);
+  console.log('ok: real threat immunity, commands, dawn -> upgrade -> mini-game; original save and legends untouched');
+
+  await page.reload({ waitUntil: 'networkidle' });
+  await state('menu'); assert.equal(await model(() => __game.night.number), 1);
+  assert.equal(await model(() => __game.admin.godMode), false);
+  assert.equal(await nick.inputValue(), 'killdev');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openButton().click(); await dialog.waitFor();
+  assert.equal(await dialog.getByRole('checkbox', { name: 'Бессмертие', exact: true }).isChecked(), false);
+  assert.ok(await model(() => document.documentElement.scrollWidth <= innerWidth));
+  const bounds = await dialog.boundingBox();
+  assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 391 && bounds.y >= 0 && bounds.y + bounds.height <= 845);
+  await page.screenshot({ path: '.sharrowkin/screenshots/admin-mobile.png' });
+  await page.keyboard.press('Escape');
+  await save('Ярик');
+  assert.equal(await model(() => __game.admin.enabled), false);
+  assert.equal(await openButton().count(), 0);
+  assert.equal(await model(() => localStorage.getItem('nightwatch.campaign.v1')), original);
+  await page.locator('#game').focus(); await page.keyboard.press('F2');
+  assert.equal(await dialog.isVisible(), false);
+  assert.deepEqual(errors, []);
+  console.log('PASS: admin access, controls, no save pollution, reload/revocation and 390px layout; no console/network errors.');
+} finally { await browser.close(); }
